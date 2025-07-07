@@ -67,6 +67,13 @@ def get_sessions_for_circuit_year(year, circuit_name):
         st.error(f"Unexpected error: {e}")
         return []
     
+def get_drivers_session(session):
+    """Get the list of drivers from the session."""
+    if session is None:
+        return []
+    
+    driver_names = session.laps.pick_quicklaps().Driver.unique()
+    return sorted(driver_names)
 
 @st.cache_data(ttl=3600)
 def get_circuit_geojson():

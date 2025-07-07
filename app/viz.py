@@ -1,5 +1,6 @@
 import plotly.express as px
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import streamlit as st
 import pandas as pd
 import fastf1 as ff1
@@ -297,265 +298,352 @@ COMPOUND_COLORS = {
     "Unknown": "#808080"    # Gray
 }
 
-def get_elevation_data(coordinates, samples=50):
-    """Get elevation data for circuit coordinates using Open Elevation API"""
+def driver_comparison_chart(session, driver1, driver2, driver1_lap, driver2_lap):
+    """
+    Create a two-pair driver comparison chart for the session with telemetry data for detailed lap analysis.
+    
+    Args:
+        session (obj): FastF1 session object
+        driver1 (str): First driver's name
+        driver2 (str): Second driver's name
+        driver1_lap (int): Lap number for the first driver
+        driver2_lap (int): Lap number for the second driver
+    
+    Returns:
+        plotly.graph_objects.Figure: Interactive driver comparison chart
+    """
     try:
-        # Sample coordinates to avoid API limits
-        if len(coordinates) > samples:
-            indices = np.linspace(0, len(coordinates)-1, samples, dtype=int)
-            sampled_coords = [coordinates[i] for i in indices]
-        else:
-            sampled_coords = coordinates
+        # Get lap data for both drivers
+        lap1 = session.laps.pick_driver(driver1).pick_lap(driver1_lap)
+        lap2 = session.laps.pick_driver(driver2).pick_lap(driver2_lap)
         
-        # Prepare coordinates for API
-        locations = []
-        for coord in sampled_coords:
-            if len(coord) >= 2:
-                locations.append({"latitude": coord[1], "longitude": coord[0]})
+        # Get telemetry data
+        tel1 = lap1.get_telemetry()
+        tel2 = lap2.get_telemetry()
         
-        if not locations:
-            return []
+        tel1['Brake'] = tel1['Brake'].replace({True: 1, False: 0})
+        tel2['Brake'] = tel2['Brake'].replace({True: 1, False: 0})
         
-        # Call Open Elevation API
-        response = requests.post(
-            'https://api.open-elevation.com/api/v1/lookup',
-            json={'locations': locations},
-            timeout=30
-        )
+        color1 =  '#FF6B6B'
+        color2 =  '#4ECDC4'
         
-        if response.status_code == 200:
-            elevations = response.json()['results']
-            return [result['elevation'] for result in elevations]
-        else:
-            # Fallback to simulated elevation
-            return np.random.uniform(0, 100, len(locations)).tolist()
-            
-    except Exception as e:
-        st.warning(f"Could not fetch elevation data: {e}. Using simulated data.")
-        return np.random.uniform(0, 100, len(coordinates)).tolist()
-
-def create_3d_circuit_visualization(circuit_name, geo_data, session_data=None):
-    """Create 3D visualization of circuit with terrain"""
-    
-    # Find the circuit in geo data
-    circuit_geo = None
-    for feature in geo_data['Location']:
-        if feature == circuit_name:
-            circuit_geo = feature
-            break
-    
-    if not circuit_geo:
-        return None
-    
-    # Extract coordinates
-    coordinates = circuit_geo['geometry'][0]
-    
-    # Get elevation data
-    elevations = get_elevation_data(coordinates)
-    
-    # Interpolate to create smooth circuit path
-    if len(coordinates) != len(elevations):
-        # Match lengths
-        min_len = min(len(coordinates), len(elevations))
-        coordinates = coordinates[:min_len]
-        elevations = elevations[:min_len]
-    
-    # Extract lat, lon, elevation
-    lons = [coord[0] for coord in coordinates]
-    lats = [coord[1] for coord in coordinates]
-    
-    # Create terrain surface around circuit
-    lat_range = max(lats) - min(lats)
-    lon_range = max(lons) - min(lons)
-    
-    # Expand area for terrain
-    terrain_lats = np.linspace(min(lats) - lat_range*0.1, max(lats) + lat_range*0.1, 30)
-    terrain_lons = np.linspace(min(lons) - lon_range*0.1, max(lons) + lon_range*0.1, 30)
-    
-    terrain_lons_mesh, terrain_lats_mesh = np.meshgrid(terrain_lons, terrain_lats)
-    
-    # Simple terrain elevation (you could use real DEM data here)
-    terrain_elevations = np.random.uniform(
-        min(elevations) - 50, 
-        max(elevations) + 50, 
-        terrain_lons_mesh.shape
-    )
-    
-    # Create the 3D plot
-    fig = go.Figure()
-    
-    # Add terrain surface
-    fig.add_trace(go.Surface(
-        x=terrain_lons_mesh,
-        y=terrain_lats_mesh,
-        z=terrain_elevations,
-        colorscale='Earth',
-        showscale=False,
-        opacity=0.7,
-        name='Terrain'
-    ))
-    
-    # Add circuit path
-    fig.add_trace(go.Scatter3d(
-        x=lons + [lons[0]],  # Close the loop
-        y=lats + [lats[0]],
-        z=[e + 10 for e in elevations] + [elevations[0] + 10],  # Elevate above terrain
-        mode='lines+markers',
-        line=dict(color='red', width=8),
-        marker=dict(size=3, color='red'),
-        name='Circuit Track'
-    ))
-    
-    # Add start/finish line
-    fig.add_trace(go.Scatter3d(
-        x=[lons[0]],
-        y=[lats[0]],
-        z=[elevations[0] + 20],
-        mode='markers',
-        marker=dict(size=10, color='green', symbol='diamond'),
-        name='Start/Finish'
-    ))
-    
-    # Update layout for 3D
-    fig.update_layout(
-        title=f"3D Circuit Visualization - {circuit_name}",
-        scene=dict(
-            xaxis_title="Longitude",
-            yaxis_title="Latitude", 
-            zaxis_title="Elevation (m)",
-            camera=dict(
-                eye=dict(x=1.5, y=1.5, z=1.5)
+        # Create subplots
+        fig = make_subplots(
+            rows=4, cols=1,
+            subplot_titles=(
+                'Speed (km/h)', 'Throttle (%)',
+                'Brake (%)', 'Gear'
             ),
-            aspectmode='manual',
-            aspectratio=dict(x=1, y=1, z=0.3),
-            bgcolor='#15151E'
-        ),
-        height=600,
-        showlegend=True,
-        paper_bgcolor='#15151E',
-        font=dict(color='white')
-    )
-    
-    return fig
-
-def create_circuit_flythrough_animation(circuit_name, geo_data):
-    """Create animated flythrough of the circuit"""
-    
-    # Find the circuit in geo data
-    circuit_geo = None
-    for feature in geo_data['features']:
-        if feature['properties']['name'] == circuit_name:
-            circuit_geo = feature
-            break
-    
-    if not circuit_geo:
-        return None
-    
-    coordinates = circuit_geo['geometry']['coordinates'][0]
-    elevations = get_elevation_data(coordinates)
-    
-    if len(coordinates) != len(elevations):
-        min_len = min(len(coordinates), len(elevations))
-        coordinates = coordinates[:min_len]
-        elevations = elevations[:min_len]
-    
-    lons = [coord[0] for coord in coordinates]
-    lats = [coord[1] for coord in coordinates]
-    
-    # Create frames for animation
-    frames = []
-    n_frames = 50
-    
-    for i in range(n_frames):
-        # Calculate camera position following the track
-        track_progress = i / n_frames
-        coord_idx = int(track_progress * (len(coordinates) - 1))
+            vertical_spacing=0.09,
+            horizontal_spacing=1
+        )
         
-        # Camera follows the track
-        camera_x = lons[coord_idx]
-        camera_y = lats[coord_idx] 
-        camera_z = elevations[coord_idx] + 100  # Above the track
+        # Speed comparison Row 1
+        fig.add_trace(
+            go.Scatter(
+                x=tel1['Distance'],
+                y=tel1['Speed'],
+                mode='lines',
+                name=f"{driver1} - Lap {driver1_lap}",
+                line=dict(color=color1, width=2),
+                hovertemplate=f"{driver1}<br>Distance: %{{x:.0f}}m<br>Speed: %{{y:.0f}} km/h<extra></extra>"
+            ),
+            row=1, col=1
+        )
         
-        # Look ahead on the track
-        look_ahead_idx = min(coord_idx + 3, len(coordinates) - 1)
-        center_x = lons[look_ahead_idx]
-        center_y = lats[look_ahead_idx]
-        center_z = elevations[look_ahead_idx]
+        fig.add_trace(
+            go.Scatter(
+                x=tel2['Distance'],
+                y=tel2['Speed'],
+                mode='lines',
+                name=f"{driver2} - Lap {driver2_lap}",
+                line=dict(color=color2, width=2),
+                hovertemplate=f"{driver2}<br>Distance: %{{x:.0f}}m<br>Speed: %{{y:.0f}} km/h<extra></extra>"
+            ),
+            row=1, col=1
+        )
         
-        frame = go.Frame(
-            data=[
-                go.Scatter3d(
-                    x=lons + [lons[0]],
-                    y=lats + [lats[0]], 
-                    z=[e + 10 for e in elevations] + [elevations[0] + 10],
-                    mode='lines+markers',
-                    line=dict(color='red', width=8),
-                    marker=dict(size=3, color='red'),
-                    name='Circuit Track'
-                )
-            ],
-            layout=go.Layout(
-                scene_camera=dict(
-                    eye=dict(
-                        x=camera_x,
-                        y=camera_y,
-                        z=camera_z
-                    ),
-                    center=dict(
-                        x=center_x,
-                        y=center_y, 
-                        z=center_z
-                    )
-                )
+        # Throttle comparison Row 2
+        fig.add_trace(
+            go.Scatter(
+                x=tel1['Distance'],
+                y=tel1['Throttle'],
+                mode='lines',
+                name=f"{driver1} Throttle",
+                line=dict(color=color1, width=2),
+                showlegend=False,
+                hovertemplate=f"{driver1}<br>Distance: %{{x:.0f}}m<br>Throttle: %{{y:.0f}}%<extra></extra>"
+            ),
+            row=2, col=1
+        )
+        
+        fig.add_trace(
+            go.Scatter(
+                x=tel2['Distance'],
+                y=tel2['Throttle'],
+                mode='lines',
+                name=f"{driver2} Throttle",
+                line=dict(color=color2, width=2),
+                showlegend=False,
+                hovertemplate=f"{driver2}<br>Distance: %{{x:.2f}}m<br>Throttle: %{{y:.0f}}%<extra></extra>"
+            ),
+            row=2, col=1
+        )
+        
+        # Brake comparison Row 3
+        fig.add_trace(
+            go.Scatter(
+                x=tel1['Distance'],
+                y=tel1['Brake'] * 100,
+                mode='lines',
+                name=f"{driver1} Brake",
+                line=dict(color=color1, width=2),
+                showlegend=False,
+                hovertemplate=f"{driver1}<br>Distance: %{{x:.2f}}m<br>Brake: %{{y:.0f}}%<extra></extra>"
+            ),
+            row=3, col=1
+        )
+        
+        fig.add_trace(
+            go.Scatter(
+                x=tel2['Distance'],
+                y=tel2['Brake'] * 100,
+                mode='lines',
+                name=f"{driver2} Brake",
+                line=dict(color=color2, width=2),
+                showlegend=False,
+                hovertemplate=f"{driver2}<br>Distance: %{{x:.2f}}m<br>Brake: %{{y:.0f}}%<extra></extra>"
+            ),
+            row=3, col=1
+        )
+        
+        # Gear comparison Row 4
+        fig.add_trace(
+            go.Scatter(
+                x=tel1['Distance'],
+                y=tel1['nGear'],
+                mode='lines',
+                name=f"{driver1} Gear",
+                line=dict(color=color1, width=2),
+                showlegend=False,
+                hovertemplate=f"{driver1}<br>Distance: %{{x:.0f}}m<br>Gear: %{{y:.0f}}<extra></extra>"
+            ),
+            row=4, col=1
+        )
+        
+        fig.add_trace(
+            go.Scatter(
+                x=tel2['Distance'],
+                y=tel2['nGear'],
+                mode='lines',
+                name=f"{driver2} Gear",
+                line=dict(color=color2, width=2),
+                showlegend=False,
+                hovertemplate=f"{driver2}<br>Distance: %{{x:.0f}}m<br>Gear: %{{y:.0f}}<extra></extra>"
+            ),
+            row=4, col=1
+        )
+        
+        # Update layout
+        fig.update_layout(
+            title=dict(
+                text=f"<b>🏎️ Driver Comparison: {driver1} (Lap {driver1_lap}) vs {driver2} (Lap {driver2_lap})</b>",
+                x=0.3,
+                font=dict(size=20, color='white', family='Arial Black')
+            ),
+            plot_bgcolor='#15151E',
+            paper_bgcolor='#15151E',
+            font=dict(color='white'),
+            height=800,
+            showlegend=True,
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.,
+                xanchor="center",
+                x=0.5,
+                bgcolor='rgba(0,0,0,0.5)',
+                bordercolor='white',
+                borderwidth=1
             )
         )
-        frames.append(frame)
-    
-    # Create base figure
-    fig = go.Figure(
-        data=[
-            go.Scatter3d(
-                x=lons + [lons[0]],
-                y=lats + [lats[0]],
-                z=[e + 10 for e in elevations] + [elevations[0] + 10],
-                mode='lines+markers',
-                line=dict(color='red', width=8),
-                marker=dict(size=3, color='red'),
-                name='Circuit Track'
+        
+        fig.update_layout(
+            legend=dict(
+                yanchor="top",
+                xanchor="left",
+                x = 0.01,
+                y = 0.01,
+                bgcolor='rgba(0,0,0,0.5)',
+                bordercolor='white',
+                borderwidth=1,
+                font=dict(color='white', size=12)
             )
-        ],
-        frames=frames
-    )
+        )
+                          
+        
+        # Update axes
+        for i in range(1, 5):
+            for j in range(1, 3):
+                fig.update_xaxes(
+                    title_text="Distance (m)" if i == 4 else "",
+                    showgrid=True,
+                    gridcolor='#404040',
+                    linecolor='white',
+                    tickfont=dict(color='white'),
+                    row=i, col=j
+                )
+                fig.update_yaxes(
+                    showgrid=True,
+                    gridcolor='#404040',
+                    linecolor='white',
+                    tickfont=dict(color='white'),
+                    row=i, col=j
+                )
+        
+        # Update specific y-axis ranges for better visualization
+        fig.update_yaxes(range=[0, 100], row=2, col=2)  # Throttle
+        fig.update_yaxes(range=[0, 100], row=3, col=1)  # Brake
+        fig.update_yaxes(range=[1, 8], row=4, col=1)    # Gear
+        
+        return fig
+        
+    except Exception as e:
+        # Return error figure
+        fig = go.Figure()
+        fig.add_annotation(
+            text=f"Error creating comparison: {str(e)}",
+            xref="paper", yref="paper",
+            x=0.5, y=0.5, showarrow=False,
+            font=dict(size=16, color='white')
+        )
+        fig.update_layout(
+            plot_bgcolor='#15151E',
+            paper_bgcolor='#15151E',
+            font=dict(color='white')
+        )
+        return fig
     
-    fig.update_layout(
-        title=f"Circuit Flythrough - {circuit_name}",
-        scene=dict(
-            xaxis_title="Longitude",
-            yaxis_title="Latitude",
-            zaxis_title="Elevation (m)",
-            aspectmode='manual',
-            aspectratio=dict(x=1, y=1, z=0.3),
-            bgcolor='#15151E'
-        ),
-        updatemenus=[{
-            'type': 'buttons',
-            'showactive': False,
-            'buttons': [
-                {
-                    'label': 'Play',
-                    'method': 'animate',
-                    'args': [None, {'frame': {'duration': 200}, 'transition': {'duration': 100}}]
-                },
-                {
-                    'label': 'Pause',
-                    'method': 'animate',
-                    'args': [[None], {'frame': {'duration': 0}, 'mode': 'immediate'}]
-                }
-            ]
-        }],
-        height=600,
-        paper_bgcolor='#15151E',
-        font=dict(color='white')
-    )
     
-    return fig
+
+# def create_circuit_flythrough_animation(circuit_name, geo_data):
+#     """Create animated flythrough of the circuit"""
+    
+#     # Find the circuit in geo data
+#     circuit_geo = None
+#     for feature in geo_data['features']:
+#         if feature['properties']['name'] == circuit_name:
+#             circuit_geo = feature
+#             break
+    
+#     if not circuit_geo:
+#         return None
+    
+#     coordinates = circuit_geo['geometry']['coordinates'][0]
+#     elevations = get_elevation_data(coordinates)
+    
+#     if len(coordinates) != len(elevations):
+#         min_len = min(len(coordinates), len(elevations))
+#         coordinates = coordinates[:min_len]
+#         elevations = elevations[:min_len]
+    
+#     lons = [coord[0] for coord in coordinates]
+#     lats = [coord[1] for coord in coordinates]
+    
+#     # Create frames for animation
+#     frames = []
+#     n_frames = 50
+    
+#     for i in range(n_frames):
+#         # Calculate camera position following the track
+#         track_progress = i / n_frames
+#         coord_idx = int(track_progress * (len(coordinates) - 1))
+        
+#         # Camera follows the track
+#         camera_x = lons[coord_idx]
+#         camera_y = lats[coord_idx] 
+#         camera_z = elevations[coord_idx] + 100  # Above the track
+        
+#         # Look ahead on the track
+#         look_ahead_idx = min(coord_idx + 3, len(coordinates) - 1)
+#         center_x = lons[look_ahead_idx]
+#         center_y = lats[look_ahead_idx]
+#         center_z = elevations[look_ahead_idx]
+        
+#         frame = go.Frame(
+#             data=[
+#                 go.Scatter3d(
+#                     x=lons + [lons[0]],
+#                     y=lats + [lats[0]], 
+#                     z=[e + 10 for e in elevations] + [elevations[0] + 10],
+#                     mode='lines+markers',
+#                     line=dict(color='red', width=8),
+#                     marker=dict(size=3, color='red'),
+#                     name='Circuit Track'
+#                 )
+#             ],
+#             layout=go.Layout(
+#                 scene_camera=dict(
+#                     eye=dict(
+#                         x=camera_x,
+#                         y=camera_y,
+#                         z=camera_z
+#                     ),
+#                     center=dict(
+#                         x=center_x,
+#                         y=center_y, 
+#                         z=center_z
+#                     )
+#                 )
+#             )
+#         )
+#         frames.append(frame)
+    
+#     # Create base figure
+#     fig = go.Figure(
+#         data=[
+#             go.Scatter3d(
+#                 x=lons + [lons[0]],
+#                 y=lats + [lats[0]],
+#                 z=[e + 10 for e in elevations] + [elevations[0] + 10],
+#                 mode='lines+markers',
+#                 line=dict(color='red', width=8),
+#                 marker=dict(size=3, color='red'),
+#                 name='Circuit Track'
+#             )
+#         ],
+#         frames=frames
+#     )
+    
+#     fig.update_layout(
+#         title=f"Circuit Flythrough - {circuit_name}",
+#         scene=dict(
+#             xaxis_title="Longitude",
+#             yaxis_title="Latitude",
+#             zaxis_title="Elevation (m)",
+#             aspectmode='manual',
+#             aspectratio=dict(x=1, y=1, z=0.3),
+#             bgcolor='#15151E'
+#         ),
+#         updatemenus=[{
+#             'type': 'buttons',
+#             'showactive': False,
+#             'buttons': [
+#                 {
+#                     'label': 'Play',
+#                     'method': 'animate',
+#                     'args': [None, {'frame': {'duration': 200}, 'transition': {'duration': 100}}]
+#                 },
+#                 {
+#                     'label': 'Pause',
+#                     'method': 'animate',
+#                     'args': [[None], {'frame': {'duration': 0}, 'mode': 'immediate'}]
+#                 }
+#             ]
+#         }],
+#         height=600,
+#         paper_bgcolor='#15151E',
+#         font=dict(color='white')
+#     )
+    
+#     return fig
