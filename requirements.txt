@@ -1,0 +1,9 @@
+streamlit
+pandas
+plotly
+numpy
+matplotlib
+seaborn
+fastf1
+requests
+geopandas
