@@ -76,11 +76,47 @@ def get_drivers_session(session):
     return sorted(driver_names)
 
 @st.cache_data(ttl=3600)
-def get_circuit_geojson():
+def get_circuits_geojson():
     """Get the GeoJSON data."""
     geo_circuits = gpd.read_file("https://raw.githubusercontent.com/bacinger/f1-circuits/refs/heads/master/f1-circuits.geojson")
-    #circuit = geo_circuits[geo_circuits['name'] == circuit_name]
-    #if not circuit.empty:
-    #    return circuit.geometry.values[0]
-    #return None
+    geo_circuits = pd.DataFrame(geo_circuits)
+    geo_circuits.drop(columns=['id'], inplace=True)
+    geo_circuits["Country"] = [
+                                'Australia',
+                                'Bahrain',
+                                'China',
+                                'Azerbaijan',
+                                'Spain',
+                                'Monaco',
+                                'Canada',
+                                'France',
+                                'Austria',
+                                'United Kingdom',
+                                'Germany',
+                                'Hungary',
+                                'Belgium',
+                                'Italy',
+                                'Singapore',
+                                'Russia',
+                                'Japan',
+                                'United States',
+                                'Mexico',
+                                'Brazil',
+                                'United Arab Emirates',
+                                'Italy',
+                                'Germany',
+                                'Portugal',
+                                'Italy',
+                                'Malaysia',
+                                'Turkey',
+                                'Netherlands',
+                                'France',
+                                'Portugal',
+                                'Brazil',
+                                'Saudi Arabia',
+                                'United States',
+                                'Qatar',
+                                'United States',
+                                'Spain'
+                            ]
     return geo_circuits

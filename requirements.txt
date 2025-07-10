@@ -7,3 +7,8 @@ seaborn
 fastf1
 requests
 geopandas
+css-inline
+streamlit-aggrid
+streamlit-navigation-bar
+folium
+streamlit-folium

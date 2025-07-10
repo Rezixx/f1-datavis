@@ -5,7 +5,9 @@ import streamlit as st
 import pandas as pd
 import fastf1 as ff1
 import numpy as np
-import requests
+from st_aggrid import AgGrid
+import folium
+from streamlit_folium import st_folium
 
 def format_lap_time(seconds):
     """Format lap time in MM:SS.mmm format for human-readable tooltips."""
@@ -22,7 +24,7 @@ def format_seconds_to_mmss(seconds):
     secs = int(seconds % 60)
     return f"{minutes:02}:{secs:02}"
 
-# FastF1 official team colors (2024 season)
+# FastF1 official team colors
 TEAM_COLORS = {
     'Red Bull Racing': '#3671C6',
     'Mercedes': '#27F4D2', 
@@ -33,8 +35,8 @@ TEAM_COLORS = {
     'Williams': '#64C4FF',
     'AlphaTauri': '#5E8FAA',
     'Alfa Romeo': '#B12039',
-    'Haas': '#B6BABD',
-    'RB': '#6692FF',
+    'Haas F1 Team': '#B6BABD',
+    'Racing Bulls': '#6692FF',
     'Kick Sauber': '#52C832'
 }
 
@@ -99,25 +101,19 @@ def plot_lap_times(session, quick_load=False):
     # Create figure
     fig = go.Figure()
     
-    # Define colors for drivers (you can customize this)
-    colors = px.colors.qualitative.Set3
-    
     # Plot each driver's lap times
     for i, driver in enumerate(drivers):
         driver_laps = valid_laps[valid_laps['Driver'] == driver].sort_values('LapNumber')
-        
+    
         if not driver_laps.empty:
-            team = driver_laps['Team'].iloc[0] if 'Team' in driver_laps.columns else None
+            team = session.get_driver(driver)['TeamName']
             
             # Get color from FastF1 team colors or use fallback
-            if team and team in TEAM_COLORS:
+            if team in TEAM_COLORS:
                 color = TEAM_COLORS[team]
             else:
-                # Try to get FastF1 color if available
-                try:
-                    color = ff1.plotting.team_color(team) if team else FALLBACK_COLORS[i % len(FALLBACK_COLORS)]
-                except:
-                    color = FALLBACK_COLORS[i % len(FALLBACK_COLORS)]
+                # Use fallback color if team not found
+                color = FALLBACK_COLORS[i % len(FALLBACK_COLORS)]
             
             # Create hover text with formatted lap times
             hover_text = [
@@ -139,7 +135,7 @@ def plot_lap_times(session, quick_load=False):
                     y=driver_laps['LapTimeSeconds'],
                     mode='lines+markers',
                     name=driver,
-                    line=dict(color=colors[i % len(colors)], width=2),
+                    line=dict(color=color, width=2),
                     marker=dict(size=4),
                     hovertemplate='%{hovertext}<extra></extra>',
                     hovertext=hover_text
@@ -157,6 +153,7 @@ def plot_lap_times(session, quick_load=False):
     tick_interval = max(1, int(time_range / 10))
     tick_vals = list(range(int(y_min), int(y_max) + 1, tick_interval))
     tick_text = [format_seconds_to_mmss(t) for t in tick_vals]
+
     
     # Update layout with F1 styling
     fig.update_layout(
@@ -196,7 +193,7 @@ def plot_lap_times(session, quick_load=False):
             bgcolor='rgba(0,0,0,0.5)',
             bordercolor='white',
             borderwidth=1,
-            font=dict(color='white', size=11)
+            font=dict(color='white', size=11)          
         ),
         hovermode='closest',
         plot_bgcolor='#15151E',  # F1 dark background
@@ -273,7 +270,7 @@ def plot_tire_strategy_chart(session):
         title=dict(
             text="Tire Strategy by Driver",
             x=0.4,
-            font=dict(size=24, color='white', family='Arial Black')
+            font=dict(size=28, color='white', family='rounded-sans')
             ),
         xaxis_title = "Lap Number",
         yaxis_title = "",
@@ -523,127 +520,80 @@ def driver_comparison_chart(session, driver1, driver2, driver1_lap, driver2_lap)
             font=dict(color='white')
         )
         return fig
-    
-    
 
-# def create_circuit_flythrough_animation(circuit_name, geo_data):
-#     """Create animated flythrough of the circuit"""
+def build_aggrid_table(data):
+    """
+    Build an AgGrid table using the provided data.
     
-#     # Find the circuit in geo data
-#     circuit_geo = None
-#     for feature in geo_data['features']:
-#         if feature['properties']['name'] == circuit_name:
-#             circuit_geo = feature
-#             break
+    Args:
+        data (GeoPandas Dataframe): Data to display in the table
     
-#     if not circuit_geo:
-#         return None
-    
-#     coordinates = circuit_geo['geometry']['coordinates'][0]
-#     elevations = get_elevation_data(coordinates)
-    
-#     if len(coordinates) != len(elevations):
-#         min_len = min(len(coordinates), len(elevations))
-#         coordinates = coordinates[:min_len]
-#         elevations = elevations[:min_len]
-    
-#     lons = [coord[0] for coord in coordinates]
-#     lats = [coord[1] for coord in coordinates]
-    
-#     # Create frames for animation
-#     frames = []
-#     n_frames = 50
-    
-#     for i in range(n_frames):
-#         # Calculate camera position following the track
-#         track_progress = i / n_frames
-#         coord_idx = int(track_progress * (len(coordinates) - 1))
+    Returns:
+        AgGrid: Streamlit AgGrid object
+    """
+    grid_options = {
+        'defaultColDef': {
+            'sortable': True,
+            'filter': True,
+            'resizable': True,
+            'wrapText': True,
+            'autoHeight': True
+        },
+        'columnDefs': [
+            {'headerName': 'Name', 'field': 'Name', 'width': 200},
+            {'headerName': 'Location', 'field': 'Location', 'width': 150},
+            {'headerName': 'Country', 'field': 'Country', 'width': 150},
+            {'headerName': 'Opened', 'field': 'opened', 'width': 100},
+            {'headerName': 'First GP', 'field': 'firstgp', 'width': 100},
+            {'headerName': 'Length (m)', 'field': 'length', 'width': 100},
+            {'headerName': 'Altitude (m)', 'field': 'altitude', 'width': 100},
+        ],
+        'rowSelection': "single",
+        "pagination": False,
+        "suppressRowClickSelection": False,
         
-#         # Camera follows the track
-#         camera_x = lons[coord_idx]
-#         camera_y = lats[coord_idx] 
-#         camera_z = elevations[coord_idx] + 100  # Above the track
+    }
+    
+    return AgGrid(
+        data,
+        height=700, 
+        gridOptions=grid_options, 
+        fit_columns_on_grid_load=True,
+        selection_mode="single",
+        use_checkbox=False,
         
-#         # Look ahead on the track
-#         look_ahead_idx = min(coord_idx + 3, len(coordinates) - 1)
-#         center_x = lons[look_ahead_idx]
-#         center_y = lats[look_ahead_idx]
-#         center_z = elevations[look_ahead_idx]
+    )
+
+def visualize_circuit_geometry(circuit_geometry, circuit_name):
+    """
+    Visualize the circuit geometry using Plotly.
+    
+    Args:
+        circuit_geometry (dict): Circuit geometry
+        circuit_name     (str): Name of the circuit
+    
+    Returns:
+        None: Displays the Plotly figure in Streamlit
+    """
+    if circuit_geometry and circuit_name:
+        center_lat, center_lon = circuit_geometry.centroid.y, circuit_geometry.centroid.x
         
-#         frame = go.Frame(
-#             data=[
-#                 go.Scatter3d(
-#                     x=lons + [lons[0]],
-#                     y=lats + [lats[0]], 
-#                     z=[e + 10 for e in elevations] + [elevations[0] + 10],
-#                     mode='lines+markers',
-#                     line=dict(color='red', width=8),
-#                     marker=dict(size=3, color='red'),
-#                     name='Circuit Track'
-#                 )
-#             ],
-#             layout=go.Layout(
-#                 scene_camera=dict(
-#                     eye=dict(
-#                         x=camera_x,
-#                         y=camera_y,
-#                         z=camera_z
-#                     ),
-#                     center=dict(
-#                         x=center_x,
-#                         y=center_y, 
-#                         z=center_z
-#                     )
-#                 )
-#             )
-#         )
-#         frames.append(frame)
-    
-#     # Create base figure
-#     fig = go.Figure(
-#         data=[
-#             go.Scatter3d(
-#                 x=lons + [lons[0]],
-#                 y=lats + [lats[0]],
-#                 z=[e + 10 for e in elevations] + [elevations[0] + 10],
-#                 mode='lines+markers',
-#                 line=dict(color='red', width=8),
-#                 marker=dict(size=3, color='red'),
-#                 name='Circuit Track'
-#             )
-#         ],
-#         frames=frames
-#     )
-    
-#     fig.update_layout(
-#         title=f"Circuit Flythrough - {circuit_name}",
-#         scene=dict(
-#             xaxis_title="Longitude",
-#             yaxis_title="Latitude",
-#             zaxis_title="Elevation (m)",
-#             aspectmode='manual',
-#             aspectratio=dict(x=1, y=1, z=0.3),
-#             bgcolor='#15151E'
-#         ),
-#         updatemenus=[{
-#             'type': 'buttons',
-#             'showactive': False,
-#             'buttons': [
-#                 {
-#                     'label': 'Play',
-#                     'method': 'animate',
-#                     'args': [None, {'frame': {'duration': 200}, 'transition': {'duration': 100}}]
-#                 },
-#                 {
-#                     'label': 'Pause',
-#                     'method': 'animate',
-#                     'args': [[None], {'frame': {'duration': 0}, 'mode': 'immediate'}]
-#                 }
-#             ]
-#         }],
-#         height=600,
-#         paper_bgcolor='#15151E',
-#         font=dict(color='white')
-#     )
-    
-#     return fig
+        m = folium.Map(location=[center_lat, center_lon], zoom_start=10, tiles='OpenStreetMap')
+        
+        folium.GeoJson(
+            circuit_geometry,
+            name=circuit_name,
+            style_function=lambda x: {'color': 'red', 'weight': 3, 'opacity': 0.8}
+        ).add_to(m)
+        
+        start_finish_coords = [circuit_geometry.coords[0][1], circuit_geometry.coords[0][0]]
+        folium.Marker(
+            location=start_finish_coords,
+            popup=f"Start/Finish: {circuit_name}",
+            icon=folium.Icon(color='green', icon='flag')
+        ).add_to(m)
+        
+        m.fit_bounds(folium.GeoJson(circuit_geometry).get_bounds())
+        
+        st.header(f"🗺️ Map of {circuit_name}")
+        st_folium(m, width=800, height=800, returned_objects=[])
