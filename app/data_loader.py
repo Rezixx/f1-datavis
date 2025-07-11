@@ -78,45 +78,54 @@ def get_drivers_session(session):
 @st.cache_data(ttl=3600)
 def get_circuits_geojson():
     """Get the GeoJSON data."""
-    geo_circuits = gpd.read_file("https://raw.githubusercontent.com/bacinger/f1-circuits/refs/heads/master/f1-circuits.geojson")
-    geo_circuits = pd.DataFrame(geo_circuits)
-    geo_circuits.drop(columns=['id'], inplace=True)
-    geo_circuits["Country"] = [
-                                'Australia',
-                                'Bahrain',
-                                'China',
-                                'Azerbaijan',
-                                'Spain',
-                                'Monaco',
-                                'Canada',
-                                'France',
-                                'Austria',
-                                'United Kingdom',
-                                'Germany',
-                                'Hungary',
-                                'Belgium',
-                                'Italy',
-                                'Singapore',
-                                'Russia',
-                                'Japan',
-                                'United States',
-                                'Mexico',
-                                'Brazil',
-                                'United Arab Emirates',
-                                'Italy',
-                                'Germany',
-                                'Portugal',
-                                'Italy',
-                                'Malaysia',
-                                'Turkey',
-                                'Netherlands',
-                                'France',
-                                'Portugal',
-                                'Brazil',
-                                'Saudi Arabia',
-                                'United States',
-                                'Qatar',
-                                'United States',
-                                'Spain'
-                            ]
-    return geo_circuits
+    url = "https://raw.githubusercontent.com/bacinger/f1-circuits/refs/heads/master/f1-circuits.geojson"
+    try:
+        # Use requests to fetch the content
+        response = requests.get(url)
+        response.raise_for_status()  # Raise an HTTPError for bad responses (4xx or 5xx)
+        
+        # Read the content from the response text
+        geo_circuits = gpd.read_file(response.text)
+        geo_circuits.drop(columns=['id'], inplace=True)
+        geo_circuits["Country"] = [
+                                    'Australia',
+                                    'Bahrain',
+                                    'China',
+                                    'Azerbaijan',
+                                    'Spain',
+                                    'Monaco',
+                                    'Canada',
+                                    'France',
+                                    'Austria',
+                                    'United Kingdom',
+                                    'Germany',
+                                    'Hungary',
+                                    'Belgium',
+                                    'Italy',
+                                    'Singapore',
+                                    'Russia',
+                                    'Japan',
+                                    'United States',
+                                    'Mexico',
+                                    'Brazil',
+                                    'United Arab Emirates',
+                                    'Italy',
+                                    'Germany',
+                                    'Portugal',
+                                    'Italy',
+                                    'Malaysia',
+                                    'Turkey',
+                                    'Netherlands',
+                                    'France',
+                                    'Portugal',
+                                    'Brazil',
+                                    'Saudi Arabia',
+                                    'United States',
+                                    'Qatar',
+                                    'United States',
+                                    'Spain'
+                                ]
+        return geo_circuits
+    except requests.exceptions.RequestException as e:
+        st.error(f"Failed to download circuit data: {e}")
+        return gpd.GeoDataFrame() # Return an empty GeoDataFrame on error

@@ -18,6 +18,15 @@ def format_lap_time(seconds):
     millis = int((seconds - int(seconds)) * 1000)
     return f"{minutes:02}:{sec:02}.{millis:03}"
 
+def format_timedelta_to_hms(td):
+    """Format a timedelta object into an HH:MM:SS string."""
+    if pd.isna(td):
+        return "N/A"
+    total_seconds = int(td.total_seconds())
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    return f"{hours:02}:{minutes:02}:{seconds:02}"
+
 def format_seconds_to_mmss(seconds):
     """Format seconds into MM:SS string for Y-axis tick labels."""
     minutes = int(seconds // 60)
@@ -510,6 +519,67 @@ def driver_comparison_chart(session, driver1, driver2, driver1_lap, driver2_lap)
         fig = go.Figure()
         fig.add_annotation(
             text=f"Error creating comparison: {str(e)}",
+            xref="paper", yref="paper",
+            x=0.5, y=0.5, showarrow=False,
+            font=dict(size=16, color='white')
+        )
+        fig.update_layout(
+            plot_bgcolor='#15151E',
+            paper_bgcolor='#15151E',
+            font=dict(color='white')
+        )
+        return fig
+
+def weather_analysis_chart(weather_data, yaxis_column):
+    """
+    Create a weather analysis chart for the session.
+    
+    Args:
+        weather_data (pd.DataFrame): Weather data for the session
+        yaxis_column (str): Column name to plot on the Y-axis
+    
+    Returns:
+        plotly.graph_objects.Figure: Interactive weather analysis chart
+    """
+    if yaxis_column is not None:
+        weather_data['TimeFormatted'] = weather_data['Time'].apply(format_timedelta_to_hms)
+        fig = px.line(weather_data, x='TimeFormatted', y=yaxis_column, title=f"Weather Analysis - {yaxis_column}")
+        
+        fig.update_traces(line=dict(color='#4ECDC4', width=2.5))
+        
+        fig.update_layout(
+            title=dict(
+                text=f"<b>🌦️ Weather Analysis: {yaxis_column}</b>",
+                x=0.4,
+                font=dict(size=20, color='white', family='Arial Black')
+            ),
+            xaxis=dict(
+                title="Time",
+                showgrid=True,
+                gridcolor='#404040',
+                linecolor='white',
+                tickfont=dict(color='white')
+            ),
+            yaxis=dict(
+                title=yaxis_column,
+                showgrid=True,
+                gridcolor='#404040',
+                linecolor='white',
+                tickfont=dict(color='white')
+            ),
+            plot_bgcolor='#15151E',
+            paper_bgcolor='#15151E',
+            font=dict(color='white'),
+            height=600,
+            hovermode='x unified'
+        )
+        
+        return fig
+    else:
+        # Return empty figure if no column selected
+        fig = go.Figure()
+        fig.add_annotation(
+            text="No weather data available",
             xref="paper", yref="paper",
             x=0.5, y=0.5, showarrow=False,
             font=dict(size=16, color='white')
