@@ -9,6 +9,5 @@ requests
 geopandas
 css-inline
 streamlit-aggrid
-streamlit-navigation-bar
 folium
 streamlit-folium

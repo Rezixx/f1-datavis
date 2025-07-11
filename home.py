@@ -1,5 +1,4 @@
 import streamlit as st
-from streamlit_navigation_bar import st_navbar
 import pages as pg
 import fastf1 as ff1
 import os

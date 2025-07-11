@@ -1,4 +1,3 @@
-from streamlit_navigation_bar import st_navbar
 import streamlit as st
 
 from app.data_loader import (
