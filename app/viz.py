@@ -3,8 +3,6 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import streamlit as st
 import pandas as pd
-import fastf1 as ff1
-import numpy as np
 from st_aggrid import AgGrid
 import folium
 from streamlit_folium import st_folium
@@ -26,6 +24,15 @@ def format_timedelta_to_hms(td):
     hours, remainder = divmod(total_seconds, 3600)
     minutes, seconds = divmod(remainder, 60)
     return f"{hours:02}:{minutes:02}:{seconds:02}"
+
+def format_timedelta_to_ms(td):
+    """Format a timedelta object into an MM:SS string."""
+    if pd.isna(td):
+        return "N/A"
+    minutes = td.components.minutes
+    seconds = td.components.seconds
+    milliseconds = td.components.milliseconds
+    return f"{minutes:02}:{seconds:02}:{milliseconds:03}"
 
 def format_seconds_to_mmss(seconds):
     """Format seconds into MM:SS string for Y-axis tick labels."""
@@ -55,6 +62,16 @@ FALLBACK_COLORS = [
     '#DDA0DD', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E9',
     '#F8C471', '#82E0AA', '#F1948A', '#85C1E9', '#F4D03F'
 ]
+
+# Tire Strategy Chart with F1 compound colors
+COMPOUND_COLORS = {
+    "SOFT": "#FF3333",      # Red
+    "MEDIUM": "#FFFF00",    # Yellow  
+    "HARD": "#FFFFFF",      # White
+    "INTERMEDIATE": "#39FF14", # Green
+    "WET": "#0080FF",       # Blue
+    "Unknown": "#808080"    # Gray
+}
 
 # Lap Time Chart
 def plot_lap_times(session, quick_load=False):
@@ -294,16 +311,6 @@ def plot_tire_strategy_chart(session):
     
     return fig
 
-# Tire Strategy Chart with F1 compound colors
-COMPOUND_COLORS = {
-    "SOFT": "#FF3333",      # Red
-    "MEDIUM": "#FFFF00",    # Yellow  
-    "HARD": "#FFFFFF",      # White
-    "INTERMEDIATE": "#39FF14", # Green
-    "WET": "#0080FF",       # Blue
-    "Unknown": "#808080"    # Gray
-}
-
 def driver_comparison_chart(session, driver1, driver2, driver1_lap, driver2_lap):
     """
     Create a two-pair driver comparison chart for the session with telemetry data for detailed lap analysis.
@@ -320,12 +327,15 @@ def driver_comparison_chart(session, driver1, driver2, driver1_lap, driver2_lap)
     """
     try:
         # Get lap data for both drivers
-        lap1 = session.laps.pick_driver(driver1).pick_lap(driver1_lap)
-        lap2 = session.laps.pick_driver(driver2).pick_lap(driver2_lap)
+        lap_d1 = session.laps.pick_drivers(driver1).pick_laps(driver1_lap)
+        lap_d2 = session.laps.pick_drivers(driver2).pick_laps(driver2_lap)
         
+        laptime_d1 = format_timedelta_to_ms(lap_d1["LapTime"].iloc[0])
+        laptime_d2 = format_timedelta_to_ms(lap_d2["LapTime"].iloc[0])
+
         # Get telemetry data
-        tel1 = lap1.get_telemetry()
-        tel2 = lap2.get_telemetry()
+        tel1 = lap_d1.get_telemetry()
+        tel2 = lap_d2.get_telemetry()
         
         tel1['Brake'] = tel1['Brake'].replace({True: 1, False: 0})
         tel2['Brake'] = tel2['Brake'].replace({True: 1, False: 0})
@@ -453,8 +463,8 @@ def driver_comparison_chart(session, driver1, driver2, driver1_lap, driver2_lap)
         # Update layout
         fig.update_layout(
             title=dict(
-                text=f"<b>🏎️ Driver Comparison: {driver1} (Lap {driver1_lap}) vs {driver2} (Lap {driver2_lap})</b>",
-                x=0.3,
+                text=f"<b>🏎️ Driver Comparison: {driver1} (Lap {driver1_lap}, {laptime_d1} ) vs {driver2} (Lap {driver2_lap}, {laptime_d2})</b>",
+                x=0.1,
                 font=dict(size=20, color='white', family='Arial Black')
             ),
             plot_bgcolor='#15151E',
