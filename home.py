@@ -128,6 +128,12 @@ def home():
                 
                 # Display the plot
                 st.plotly_chart(lap_times_fig, use_container_width=True)
+                st.info(
+                    "**What to look for:**\n"
+                    "*   **Trends:** Do lap times generally get faster as fuel burns off?\n"
+                    "*   **Consistency:** Which drivers have the most consistent lap times?\n"
+                    "*   **Anomalies:** Sudden slow laps can indicate a pit stop, a mistake, or traffic."
+                )
                 
             with st.expander("Tire Strategy Chart", expanded=True):  
                 tire_strat_fig = plot_tire_strategy_chart(session_data)
@@ -146,9 +152,9 @@ def home():
                 index = None
                 )
             if driver1_dropdown is not None:
-                lap_driver1 = st.select_slider(options=session_data.laps.pick_driver(driver1_dropdown)["LapNumber"].to_list(),
+                lap_driver1 = st.select_slider(options=session_data.laps.pick_drivers(driver1_dropdown)["LapNumber"].to_list(),
                     label="Select Lap Number for Driver 1",
-                    value = session_data.laps.pick_driver(driver1_dropdown).pick_fastest()["LapNumber"])
+                    value = session_data.laps.pick_drivers(driver1_dropdown).pick_fastest()["LapNumber"])
         with d_col2:
             driver2_dropdown = st.selectbox(
                 "Select Driver 2",
@@ -156,9 +162,9 @@ def home():
                 index = None
                 )
             if driver2_dropdown is not None:
-                lap_driver2 = st.select_slider(options=session_data.laps.pick_driver(driver1_dropdown)["LapNumber"].to_list(),
+                lap_driver2 = st.select_slider(options=session_data.laps.pick_drivers(driver1_dropdown)["LapNumber"].to_list(),
                     label="Select Lap Number for Driver 2",
-                    value = session_data.laps.pick_driver(driver2_dropdown).pick_fastest()["LapNumber"])
+                    value = session_data.laps.pick_drivers(driver2_dropdown).pick_fastest()["LapNumber"])
                 
             
         if driver1_dropdown and driver2_dropdown and driver1_dropdown != driver2_dropdown:
@@ -179,7 +185,7 @@ def home():
         if st.session_state.session_data is not None:
             weather_data = session_data.weather_data
             if weather_data is not None and not weather_data.empty:
-                columns_to_plot = weather_data.drop(columns=['Time'])
+                columns_to_plot = weather_data.drop(columns=['Time', 'WindDirection'])
                 options = st.selectbox("Select the column to plot", columns_to_plot.columns, index=None)
                 
                 # Plotting the weather data

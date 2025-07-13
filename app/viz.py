@@ -7,6 +7,8 @@ from st_aggrid import AgGrid
 import folium
 from streamlit_folium import st_folium
 
+pd.set_option('future.no_silent_downcasting', True)
+
 def format_lap_time(seconds):
     """Format lap time in MM:SS.mmm format for human-readable tooltips."""
     if pd.isna(seconds) or seconds <= 0:
@@ -119,7 +121,7 @@ def plot_lap_times(session, quick_load=False):
     
     
     # Convert LapTime to seconds for plotting
-    valid_laps['LapTimeSeconds'] = valid_laps['LapTime'].dt.total_seconds()
+    valid_laps.loc[:, 'LapTimeSeconds'] = valid_laps['LapTime'].dt.total_seconds()
     
     # Get unique drivers
     drivers = valid_laps['Driver'].unique()
@@ -630,8 +632,7 @@ def build_aggrid_table(data):
         ],
         'rowSelection': "single",
         "pagination": False,
-        "suppressRowClickSelection": False,
-        
+        "suppressRowClickSelection": False
     }
     
     return AgGrid(
@@ -641,7 +642,7 @@ def build_aggrid_table(data):
         fit_columns_on_grid_load=True,
         selection_mode="single",
         use_checkbox=False,
-        
+        theme="fresh"
     )
 
 def visualize_circuit_geometry(circuit_geometry, circuit_name):
