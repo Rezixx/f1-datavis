@@ -42,7 +42,7 @@ def format_seconds_to_mmss(seconds):
     secs = int(seconds % 60)
     return f"{minutes:02}:{secs:02}"
 
-# FastF1 official team colors
+# FastF1 official team colors for consistent branding
 TEAM_COLORS = {
     'Red Bull Racing': '#3671C6',
     'Mercedes': '#27F4D2', 
@@ -58,14 +58,14 @@ TEAM_COLORS = {
     'Kick Sauber': '#52C832'
 }
 
-# Backup colors if team not found
+# Backup colors if team not found in official colors
 FALLBACK_COLORS = [
     '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7',
     '#DDA0DD', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E9',
     '#F8C471', '#82E0AA', '#F1948A', '#85C1E9', '#F4D03F'
 ]
 
-# Tire Strategy Chart with F1 compound colors
+# F1 tire compound colors
 COMPOUND_COLORS = {
     "SOFT": "#FF3333",      # Red
     "MEDIUM": "#FFFF00",    # Yellow  
@@ -75,16 +75,31 @@ COMPOUND_COLORS = {
     "Unknown": "#808080"    # Gray
 }
 
-# Lap Time Chart
+# |--------- Lap Times Chart ---------|
 def plot_lap_times(session, quick_load=False):
     """
-    Plot lap times for all drivers throughout the session.
+    Create an interactive line chart showing lap time progression for all drivers throughout a session.
+    
+    This visualization displays how each driver's lap times evolve over the course of a session,
+    allowing users to identify performance trends, consistency patterns, and strategic decisions.
+    The chart uses official F1 team colors for authentic visual representation.
+    
+    Storytelling:
+    This chart tells the story of a Formula 1 session through the lens of lap time performance.
+    Each line represents a driver's journey through the session, revealing:
+    - Performance evolution as cars burn fuel and tires degrade
+    - Consistency differences between drivers and teams
+    - Strategic pit stop timing (visible as time spikes)
+    - Traffic impact and clear track opportunities
+    - Weather condition effects on overall pace
+    The visualization helps viewers understand the tactical battle beneath the surface of F1 racing.
     
     Args:
-        session: FastF1 session object
+        session (fastf1.core.Session): Loaded F1 session object containing lap data
+        quick_load (bool): If True, only shows quickest laps; if False, shows all valid laps
     
     Returns:
-        plotly.graph_objects.Figure: Interactive lap times chart
+        plotly.graph_objects.Figure: Interactive lap times chart with hover tooltips and team colors
     """
     # Load session data if not already loaded
     if not hasattr(session, 'laps') or session.laps is None:
@@ -93,16 +108,19 @@ def plot_lap_times(session, quick_load=False):
     # Get all laps data
     laps = session.laps
     
+
     if quick_load:
+        # Only quick laps to show relevant laps
         valid_laps = laps.pick_quicklaps()
     else:
-        # Filter out invalid lap times (NaN, 0, or extremely slow laps > 300 seconds)
+        # Filter out invalid lap times (NaN, too slow, or unrealistic times)
         valid_laps = laps[
             (laps['LapTime'].notna()) & 
             (laps['LapTime'] > pd.Timedelta(seconds=30)) & 
             (laps['LapTime'] < pd.Timedelta(seconds=300))
         ].copy()
-        
+    
+    # Handle case where no valid laps exists
     if valid_laps.empty:
         # Return empty figure if no valid laps
         fig = go.Figure()
@@ -140,7 +158,6 @@ def plot_lap_times(session, quick_load=False):
             if team in TEAM_COLORS:
                 color = TEAM_COLORS[team]
             else:
-                # Use fallback color if team not found
                 color = FALLBACK_COLORS[i % len(FALLBACK_COLORS)]
             
             # Create hover text with formatted lap times
@@ -157,6 +174,7 @@ def plot_lap_times(session, quick_load=False):
                 )
             ]
             
+            # Add driver trace to the plot
             fig.add_trace(
                 go.Scatter(
                     x=driver_laps['LapNumber'],
@@ -249,24 +267,49 @@ def plot_lap_times(session, quick_load=False):
     
     return fig
 
+# |--------- Tire Strategy Chart ---------|
 def plot_tire_strategy_chart(session):
     """
-    Plot tire strategy chart for all drivers in the session.
+    Create a horizontal stacked bar chart visualizing tire compound strategies for all drivers.
+    
+    This chart displays each driver's tire strategy throughout the session, showing
+    when they used different tire compounds and for how many laps. Each compound
+    is color-coded according to FIA regulations.
+    
+    Storytelling:
+    This visualization reveals the strategic chess game of Formula 1 tire management.
+    Each horizontal bar tells a driver's tactical story:
+    - Stint length decisions (longer stints vs. fresh tire advantage)
+    - Compound choices based on track conditions and strategy
+    - Pit stop timing coordination with team strategy
+    - Risk vs. reward decisions in tire compound selection
+    - Weather-related strategy adaptations (intermediate/wet compounds)
+    The chart exposes how teams balance speed, durability, and strategic positioning.
+    
+    Args:
+        session (fastf1.core.Session): Loaded F1 session object containing lap and stint data
+    
+    Returns:
+        plotly.graph_objects.Figure: Horizontal stacked bar chart showing tire strategies
     """
     
+    # Extract lap data and driver list
     laps = session.laps
     drivers = session.drivers
     
+    # Convert driver numbers to abbreviations for cleaner display
     drivers = [session.get_driver(d)["Abbreviation"] for d in drivers]
     
+    # Group laps by driver, stint, and compound to calculate stint lengths
     stints = laps[["Driver", "Stint", "Compound", "LapNumber"]].groupby(["Driver", "Stint", "Compound"]).count().reset_index().rename(columns={"LapNumber": "StintLength"})
     
     fig = go.Figure()
     
+    # Create stacked bars for each driver's tire strategy
     for driver in drivers:
         driver_stints = stints.loc[stints["Driver"] == driver]
         
-        previous_stint_end = 0
+        previous_stint_end = 0  # Track stint lengths
         for _, row in driver_stints.iterrows():
             compound_color = COMPOUND_COLORS.get(row["Compound"])
             
@@ -286,14 +329,15 @@ def plot_tire_strategy_chart(session):
                         f"Compound: {row['Compound']}<br>"
                         f"Length: {row['StintLength']} laps<extra></extra>"
                     ),
-                    base=max(previous_stint_end-1,0),
+                    base=max(previous_stint_end-1,0),   # stack horizontally
                     showlegend=False
                 )
             )
             
+            # Update previous stint end for next iteration
             previous_stint_end += row["StintLength"]       
             
-            
+    # Apply styling consistent with F1 theme         
     fig.update_layout(
         title=dict(
             text="Tire Strategy by Driver",
@@ -313,25 +357,40 @@ def plot_tire_strategy_chart(session):
     
     return fig
 
+# |--------- Driver Comparison Chart ---------|
 def driver_comparison_chart(session, driver1, driver2, driver1_lap, driver2_lap):
     """
-    Create a two-pair driver comparison chart for the session with telemetry data for detailed lap analysis.
+    Create a comprehensive telemetry comparison chart between two drivers for specific laps.
+    
+    This multi-panel visualization compares detailed telemetry data (speed, throttle, brake, gear)
+    between two drivers on selected laps, providing insights into driving techniques and performance differences.
+    
+    Storytelling:
+    This chart reveals the intimate details of Formula 1 driving skill and pushing the edge.
+    Through four synchronized telemetry panels, it tells the story of:
+    - Driving style differences (aggressive vs. smooth inputs)
+    - Braking point variations and late-braking opportunities
+    - Throttle application techniques (early vs. late apex acceleration)
+    - Gear selection strategies and shift point optimization
+    - Corner-by-corner performance advantages and weaknesses
+    The visualization exposes the tiny margins that separate F1 drivers at the very highest level.
     
     Args:
-        session (obj): FastF1 session object
-        driver1 (str): First driver's name
-        driver2 (str): Second driver's name
-        driver1_lap (int): Lap number for the first driver
-        driver2_lap (int): Lap number for the second driver
+        session (fastf1.core.Session): Loaded F1 session object
+        driver1 (str): First driver's name/abbreviation
+        driver2 (str): Second driver's name/abbreviation  
+        driver1_lap (int): Lap number for first driver analysis
+        driver2_lap (int): Lap number for second driver analysis
     
     Returns:
-        plotly.graph_objects.Figure: Interactive driver comparison chart
+        plotly.graph_objects.Figure: Multi-panel telemetry comparison chart
     """
     try:
         # Get lap data for both drivers
         lap_d1 = session.laps.pick_drivers(driver1).pick_laps(driver1_lap)
         lap_d2 = session.laps.pick_drivers(driver2).pick_laps(driver2_lap)
         
+        # Format lap times for display
         laptime_d1 = format_timedelta_to_ms(lap_d1["LapTime"].iloc[0])
         laptime_d2 = format_timedelta_to_ms(lap_d2["LapTime"].iloc[0])
 
@@ -339,13 +398,14 @@ def driver_comparison_chart(session, driver1, driver2, driver1_lap, driver2_lap)
         tel1 = lap_d1.get_telemetry()
         tel2 = lap_d2.get_telemetry()
         
+        # Convert brake boolean values to 0/1 for plotting
         tel1['Brake'] = tel1['Brake'].replace({True: 1, False: 0})
         tel2['Brake'] = tel2['Brake'].replace({True: 1, False: 0})
         
-        color1 =  '#FF6B6B'
-        color2 =  '#4ECDC4'
-        
-        # Create subplots
+        color1 =  TEAM_COLORS.get(session.get_driver(driver1)['TeamName'], '#FF6B6B')  # Default to red if not found
+        color2 =  TEAM_COLORS.get(session.get_driver(driver2)['TeamName'], '#4ECDC4')  # Default to teal if not found
+                
+        # Create 4 subplots
         fig = make_subplots(
             rows=4, cols=1,
             subplot_titles=(
@@ -356,7 +416,7 @@ def driver_comparison_chart(session, driver1, driver2, driver1_lap, driver2_lap)
             horizontal_spacing=1
         )
         
-        # Speed comparison Row 1
+        # Subplot 1: Speed comparison
         fig.add_trace(
             go.Scatter(
                 x=tel1['Distance'],
@@ -375,13 +435,13 @@ def driver_comparison_chart(session, driver1, driver2, driver1_lap, driver2_lap)
                 y=tel2['Speed'],
                 mode='lines',
                 name=f"{driver2} - Lap {driver2_lap}",
-                line=dict(color=color2, width=2),
+                line=dict(color=color2, width=2, dash='dot'),
                 hovertemplate=f"{driver2}<br>Distance: %{{x:.0f}}m<br>Speed: %{{y:.0f}} km/h<extra></extra>"
             ),
             row=1, col=1
         )
         
-        # Throttle comparison Row 2
+        # Subplot 2: Throttle comparison
         fig.add_trace(
             go.Scatter(
                 x=tel1['Distance'],
@@ -401,18 +461,18 @@ def driver_comparison_chart(session, driver1, driver2, driver1_lap, driver2_lap)
                 y=tel2['Throttle'],
                 mode='lines',
                 name=f"{driver2} Throttle",
-                line=dict(color=color2, width=2),
+                line=dict(color=color2, width=2, dash='dot'),
                 showlegend=False,
                 hovertemplate=f"{driver2}<br>Distance: %{{x:.2f}}m<br>Throttle: %{{y:.0f}}%<extra></extra>"
             ),
             row=2, col=1
         )
         
-        # Brake comparison Row 3
+        # Subplot 3: Brake comparison
         fig.add_trace(
             go.Scatter(
                 x=tel1['Distance'],
-                y=tel1['Brake'] * 100,
+                y=tel1['Brake'] * 100, # Convert to percentage
                 mode='lines',
                 name=f"{driver1} Brake",
                 line=dict(color=color1, width=2),
@@ -428,14 +488,14 @@ def driver_comparison_chart(session, driver1, driver2, driver1_lap, driver2_lap)
                 y=tel2['Brake'] * 100,
                 mode='lines',
                 name=f"{driver2} Brake",
-                line=dict(color=color2, width=2),
+                line=dict(color=color2, width=2, dash='dot'),
                 showlegend=False,
                 hovertemplate=f"{driver2}<br>Distance: %{{x:.2f}}m<br>Brake: %{{y:.0f}}%<extra></extra>"
             ),
             row=3, col=1
         )
         
-        # Gear comparison Row 4
+        # Subplot 4: Gear comparison
         fig.add_trace(
             go.Scatter(
                 x=tel1['Distance'],
@@ -455,7 +515,7 @@ def driver_comparison_chart(session, driver1, driver2, driver1_lap, driver2_lap)
                 y=tel2['nGear'],
                 mode='lines',
                 name=f"{driver2} Gear",
-                line=dict(color=color2, width=2),
+                line=dict(color=color2, width=2, dash='dot'),
                 showlegend=False,
                 hovertemplate=f"{driver2}<br>Distance: %{{x:.0f}}m<br>Gear: %{{y:.0f}}<extra></extra>"
             ),
@@ -477,30 +537,17 @@ def driver_comparison_chart(session, driver1, driver2, driver1_lap, driver2_lap)
             legend=dict(
                 orientation="h",
                 yanchor="bottom",
-                y=1.,
+                y=1,
                 xanchor="center",
-                x=0.5,
-                bgcolor='rgba(0,0,0,0.5)',
-                bordercolor='white',
-                borderwidth=1
-            )
-        )
-        
-        fig.update_layout(
-            legend=dict(
-                yanchor="top",
-                xanchor="left",
-                x = 0.01,
-                y = 0.01,
+                x=0.91,
                 bgcolor='rgba(0,0,0,0.5)',
                 bordercolor='white',
                 borderwidth=1,
                 font=dict(color='white', size=12)
             )
         )
-                          
         
-        # Update axes
+        # Update axes for styling for all subplots
         for i in range(1, 5):
             for j in range(1, 3):
                 fig.update_xaxes(
@@ -542,21 +589,38 @@ def driver_comparison_chart(session, driver1, driver2, driver1_lap, driver2_lap)
         )
         return fig
 
+# |--------- Weather Analysis Chart ---------|
 def weather_analysis_chart(weather_data, yaxis_column):
     """
-    Create a weather analysis chart for the session.
+    Create a time-series chart analyzing weather conditions during an F1 session.
+    
+    This visualization displays how weather parameters change throughout a session,
+    providing insights into environmental factors that influence racing conditions and strategy.
+    
+    Storytelling:
+    This chart reveals weather's crucial role as the 'invisible competitor' in Formula 1.
+    The timeline tells the story of:
+    - Changing track conditions affecting grip and tire strategy
+    - Temperature variations influencing car setup and tire performance
+    - Humidity and wind patterns affecting aerodynamic balance
+    - Barometric pressure changes indicating approaching weather systems
+    - Critical moments when weather shifts force strategic decisions
+    Weather data often explains unexpected lap time variations and strategic choices that seem puzzling without context.
     
     Args:
-        weather_data (pd.DataFrame): Weather data for the session
-        yaxis_column (str): Column name to plot on the Y-axis
+        weather_data (pd.DataFrame): Weather data for the session with time-indexed measurements
+        yaxis_column (str): Specific weather parameter to visualize
     
     Returns:
-        plotly.graph_objects.Figure: Interactive weather analysis chart
+        plotly.graph_objects.Figure: Time-series weather analysis chart
     """
+    
     if yaxis_column is not None:
+        # Format time data for readable x-axis labels
         weather_data['TimeFormatted'] = weather_data['Time'].apply(format_timedelta_to_hms)
         fig = px.line(weather_data, x='TimeFormatted', y=yaxis_column, title=f"Weather Analysis - {yaxis_column}")
         
+        # Apply consistent styling with other F1 charts
         fig.update_traces(line=dict(color='#4ECDC4', width=2.5))
         
         fig.update_layout(
@@ -605,21 +669,25 @@ def weather_analysis_chart(weather_data, yaxis_column):
 
 def build_aggrid_table(data):
     """
-    Build an AgGrid table using the provided data.
+    Create an interactive AgGrid table component for displaying F1 circuit data.
+    
+    This function configures and builds a sortable, filterable data table
+    optimized for displaying circuit information with selectable rows for
+    triggering detailed visualizations.
     
     Args:
-        data (GeoPandas Dataframe): Data to display in the table
+        data (pd.DataFrame): Circuit data to display in tabular format
     
     Returns:
-        AgGrid: Streamlit AgGrid object
+        AgGrid: Configured Streamlit AgGrid component with sorting, filtering, and selection capabilities
     """
     grid_options = {
         'defaultColDef': {
-            'sortable': True,
-            'filter': True,
-            'resizable': True,
-            'wrapText': True,
-            'autoHeight': True
+            'sortable': True,      # Enable column sorting
+            'filter': True,        # Enable column filtering
+            'resizable': True,     # Allow column resizing
+            'wrapText': True,      # Wrap long text content
+            'autoHeight': True     # Auto-adjust row heights
         },
         'columnDefs': [
             {'headerName': 'Name', 'field': 'Name', 'width': 200},
@@ -637,7 +705,7 @@ def build_aggrid_table(data):
     
     return AgGrid(
         data,
-        height=700, 
+        height=800, 
         gridOptions=grid_options, 
         fit_columns_on_grid_load=True,
         selection_mode="single",
@@ -645,36 +713,55 @@ def build_aggrid_table(data):
         theme="fresh"
     )
 
+# |--------- Circuit Visualization ---------|
 def visualize_circuit_geometry(circuit_geometry, circuit_name):
     """
-    Visualize the circuit geometry using Plotly.
+    Create an interactive map visualization of a Formula 1 circuit layout.
+    
+    This function generates a Folium map displaying the circuit's track geometry
+    with geographical context, including start/finish line markers and proper
+    map bounds fitting the circuit layout.
+    
+    Storytelling:
+    This map visualization brings F1 circuits to life by showing their real-world context.
+    Each circuit tells a geographical story:
+    - Urban circuits threading through city streets (Monaco, Singapore)  
+    - Purpose-built facilities in remote locations (Spa, Silverstone)
+    - Elevation changes and natural terrain integration
+    - Strategic corner sequences and straight sections
+    - Proximity to local landmarks and infrastructure
+    The map helps viewers understand why each circuit produces unique racing characteristics.
     
     Args:
-        circuit_geometry (dict): Circuit geometry
-        circuit_name     (str): Name of the circuit
+        circuit_geometry (shapely.geometry): Circuit track geometry coordinates
+        circuit_name (str): Name of the circuit for labeling and identification
     
     Returns:
-        None: Displays the Plotly figure in Streamlit
+        None: Displays the interactive map directly in Streamlit interface
     """
     if circuit_geometry and circuit_name:
         center_lat, center_lon = circuit_geometry.centroid.y, circuit_geometry.centroid.x
         
         m = folium.Map(location=[center_lat, center_lon], zoom_start=10, tiles='OpenStreetMap')
         
+        # Add circuit track geometry as red line overlay
         folium.GeoJson(
             circuit_geometry,
             name=circuit_name,
             style_function=lambda x: {'color': 'red', 'weight': 3, 'opacity': 0.8}
         ).add_to(m)
         
+        # Mark start/finish line location
         start_finish_coords = [circuit_geometry.coords[0][1], circuit_geometry.coords[0][0]]
         folium.Marker(
             location=start_finish_coords,
             popup=f"Start/Finish: {circuit_name}",
-            icon=folium.Icon(color='green', icon='flag')
+            icon=folium.Icon(color='black', icon='flag')
         ).add_to(m)
         
+        # Automatically fit map bounds to circuit geometry
         m.fit_bounds(folium.GeoJson(circuit_geometry).get_bounds())
         
+        # Display map in Streamlit with circuit name header
         st.header(f"🗺️ Map of {circuit_name}")
         st_folium(m, width=800, height=800, returned_objects=[])
