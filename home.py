@@ -173,6 +173,7 @@ def home():
                 # Display the plot
                 st.info(
                     "**What to look for:**\n"
+                    "*   **Fastest Laps: Which driver set the fastes lap time of the session?\n"
                     "*   **Trends:** Do lap times generally get faster as fuel burns off?\n"
                     "*   **Consistency:** Which drivers have the most consistent lap times?\n"
                     "*   **Anomalies:** Sudden slow laps can indicate a pit stop, a mistake, or traffic."
