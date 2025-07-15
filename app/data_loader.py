@@ -117,7 +117,7 @@ def get_sessions_for_circuit_year(year, circuit_name):
         return []
     
 @st.cache_data(ttl=3600)
-def get_drivers_session(session):
+def get_drivers_session(_session):
     """
     Extract and return a sorted list of driver names from a loaded F1 session.
     
@@ -131,11 +131,9 @@ def get_drivers_session(session):
         list: Sorted list of driver names (3-letter abbreviations or full names)
               Returns empty list if session is None or contains no valid data
     """
-    if session is None:
-        return []
     
     # Get all unique drivers who recorded quick laps
-    driver_names = session.laps.pick_quicklaps().Driver.unique()
+    driver_names = _session.laps.pick_quicklaps().Driver.unique()
     return sorted(driver_names)
 
 @st.cache_data(ttl=3600)
